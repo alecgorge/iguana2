@@ -24,7 +24,7 @@ All data structures have a unique, autoincrementing id and a created_at and upda
   
 * `JustArchive` (when setlist.fm doesn't have good information for an artist, basically iguana 1.0)
 	1. Import media and build setlist information based on [archive.org](http://archive.org). Only attempt to reuse venues when they belong specifically to that artist (setlist.fm venues are shared across artists).
-
+	
 * `WidespreadPanic`
 	1. Import setlist data just like `ArchiveSetlistfm`.
 	2. Import media from [panicstream.com](http://panicstream.com).
@@ -36,10 +36,10 @@ Column Name | Type | Comments
 name | string
 identifier | string | potentially used by the `data_source` to look up data appropriately
 data_source | string | an identifier refering to one of the different data collection techniques (Phish, ArchiveSetlist, JustArchive, etc)
-features | has_one **FeatureSet** | what kind of functionality can we expect the `data_source` to provide. This is mostly to guide the UI so it can be written in a general way
 
 Relation Name | Type | Comments
 :---------- | :--- | :-------
+features | has_one **FeatureSet** | what kind of functionality can we expect the `data_source` to provide. This is mostly to guide the UI so it can be written in a general way
 years | has_many **Year**
 shows | has_many **Show**
 
