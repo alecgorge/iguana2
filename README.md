@@ -36,6 +36,7 @@ Column Name | Type | Comments
 name | string
 identifier | string | potentially used by the `data_source` to look up data appropriately
 data_source | string | an identifier refering to one of the different data collection techniques (Phish, ArchiveSetlist, JustArchive, etc)
+musicbrainz_id | string | A useful identifier for integrating with a variety of services
 
 Relation Name | Type | Comments
 :---------- | :--- | :-------
@@ -69,6 +70,8 @@ setlistfm | boolean | Does the artist have normalized data for songs, venues, et
 multiple_sources | boolean | To clean up the UI. Everything will still be stored as if it can support multiple sources. Some artists, such as Phish, won't ever have multiple sources for a show. This will allow queries and UI paths to short-circuit.
 reviews_ratings | boolean
 tours | boolean
+taper_notes | boolean | Is the raw txt file from the source available?
+source_information | boolean | Broken down information (taper, transferrer, etc) instead of big taper notes
 
 Relation Name | Type | Comments
 :---------- | :--- | :-------
@@ -89,13 +92,44 @@ years | has_many **Year**
 
 ### Show
 
+Column Name | Type | Comments
+:---------- | :--- | :-------
+date | date | See `display_date`.
+display_date | string | Sometimes the date is unknown (1970-XX-XX so this column is used for display and the first of the month or year is used for sorting)
+year | int
+
+Relation Name | Type | Comments
+:---------- | :--- | :-------
+tour | belongs_to **Tour**
+venue | belongs_to **Venue**
+sources | has_many **Source**
+sets | has_many **Set**
+
+### Source
+
+Column Name | Type | Comments
+:---------- | :--- | :-------
+source_identifier | string | Something to identify the this information in the data source
+description | string
+notes | string
+source | string
+taper | string
+transferer | string
+lineage | string
+
+Relation Name | Type | Comments
+:---------- | :--- | :-------
+show | belongs_to **Show**
 
 ### Set
+
+**Note:** may not provide useful information for all artists.
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
 index | int | Used for ordering the sets properly
 name | string
+is_encore | boolean
 
 Relation Name | Type | Comments
 :---------- | :--- | :-------
