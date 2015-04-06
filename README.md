@@ -66,12 +66,14 @@ artist | belongs_to **Artist**
 Column Name | Type | Comments
 :---------- | :--- | :-------
 eras | boolean | Does the artist have eras (Phish 1.0, Phish 2.0, Phish 3.0)
-setlistfm | boolean | Does the artist have normalized data for songs, venues, etc (basically, is setlist.fm data reliable). If this is `false` "sets" will be constructed with all the tracks for the show in one set
 multiple_sources | boolean | To clean up the UI. Everything will still be stored as if it can support multiple sources. Some artists, such as Phish, won't ever have multiple sources for a show. This will allow queries and UI paths to short-circuit.
 reviews_ratings | boolean
 tours | boolean
 taper_notes | boolean | Is the raw txt file from the source available?
 source_information | boolean | Broken down information (taper, transferrer, etc) instead of big taper notes
+sets | boolean
+venues | boolean
+songs | boolean
 
 Relation Name | Type | Comments
 :---------- | :--- | :-------
@@ -97,6 +99,8 @@ Column Name | Type | Comments
 date | date | See `display_date`.
 display_date | string | Sometimes the date is unknown (1970-XX-XX so this column is used for display and the first of the month or year is used for sorting)
 year | int
+rating_weighted_avg | float
+duration_avg | float
 
 Relation Name | Type | Comments
 :---------- | :--- | :-------
@@ -109,17 +113,79 @@ sets | has_many **Set**
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
-source_identifier | string | Something to identify the this information in the data source
+source_id | string | Something to identify the this information in the data source
 description | string
-notes | string
+taper_notes | string | For sources that don't have detailed info, this will be the whole txt file. For others it is just a bit informtation
 source | string
 taper | string
 transferer | string
 lineage | string
+is_soundboard | boolean
+is_remastered | boolean
+rating_avg | float
+rating_count | int
+rating_weighted_avg | float
 
 Relation Name | Type | Comments
 :---------- | :--- | :-------
 show | belongs_to **Show**
+reviews | has_many **SourceReview**
+sets | has_many **SourceSet**
+tracks | has_many **SourceTrack**
+
+### SourceSet
+
+Column Name | Type | Comments
+:---------- | :--- | :-------
+index | int | Used for ordering the sets properly
+name | string
+is_encore | boolean
+
+Relation Name | Type | Comments
+:---------- | :--- | :-------
+tracks | has_many **SourceTrack**
+show | belongs_to **SourceShow** | SourceSets are unique to a given Source
+
+### SourceTrack
+
+Column Name | Type | Comments
+:---------- | :--- | :-------
+track_position | int
+title | string
+duration | int
+slug | string
+mp3_url | string
+
+Relation Name | Type | Comments
+:---------- | :--- | :-------
+source | belongs_to **Source**
+set | belongs_to **SourceSet**
+
+### SourceReview
+
+Column Name | Type | Comments
+:---------- | :--- | :-------
+review_title | string
+review | string
+author | string
+date | date
+rating | int
+
+Relation Name | Type | Comments
+:---------- | :--- | :-------
+source | belongs_to **Source**
+
+### Song
+
+Column Name | Type | Comments
+:---------- | :--- | :-------
+title | string
+slug | string
+play_count | int | Counted from `Track` not `SourceTrack`.
+
+Relation Name | Type | Comments
+:---------- | :--- | :-------
+artist | belongs_to **Source**
 
 ### Set
 
@@ -135,6 +201,19 @@ Relation Name | Type | Comments
 :---------- | :--- | :-------
 tracks | has_many **Track**
 show | belongs_to **Show** | Sets are unique to a given show
+
+### Track
+
+Column Name | Type | Comments
+:---------- | :--- | :-------
+track_position | int
+title | string
+
+Relation Name | Type | Comments
+:---------- | :--- | :-------
+show | belongs_to **Show**
+set | belongs_to **Set**
+song | belongs_to **Song**
 
 ### Tour
 
@@ -152,9 +231,89 @@ Relation Name | Type | Comments
 show | has_many **Show**
 artist | belongs_to **Artist**
 
+### Venue
+
+Column Name | Type | Comments
+:---------- | :--- | :-------
+name | string
+city | string
+state | string
+state_code | string
+lat | float
+long | float
+country | string
+country_code | string
+source_id | string
+
+Relation Name | Type | Comments
+:---------- | :--- | :-------
+show | has_many **Show**
+artist | belongs_to **Artist** | this is only needed for artists not on setlist.fm. otherwise, venues **can** be shared.
 
 ## Functionality required to stream
 
-Feature | archive.net | panicstreams.com | phish.in | setlists.net | 
-:------ | :---------- | :--------------- | :------- | 
-MP3 URL | 
+Legend: **P**: partial (not the best data but it can be done). **✓**: complete.
+
+Feature 		| archive.net | panicstreams.com | phish.in | phish.net | setlist.fm | manual entry | calculated |
+:------ 		| :---------: | :--------------: | :------: | :-------: | :--------: | :----------: | :--------: |
+Artist			| | | | | | ✓ |
+Year			| | | | | | | ✓
+FeatureSet		| | | | | | ✓ |
+Era				| | | ✓ | | |
+Show			| P | P | ✓ | ✓ | ✓ | | P (rating)
+Source			| ✓ | ✓ | ✓ | P (rating)
+SourceSet		| P | P | ✓
+SourceTrack		| ✓ | ✓ | ✓
+SourceReview	| ✓ |   |   | ✓ |
+Song			| | | ✓ | | ✓ |
+Set				| P | P | ✓ | ✓ | ✓
+Track			| P | P | ✓ | ✓ | ✓
+Tour			| | | ✓ | ✓ | P
+Venue			| P | P | ✓ | ✓ | ✓
+
+## Indexing Approach
+
+```
+module DataImport {
+	export class Indexer {
+		artist: Artist;
+		constructor(artist: Artist);
+		rebuildYears() : Promise;
+	}
+}
+```
+
+### Phish
+
+1. Pull tour list from `http://phish.in/api/v1/tours.json?per_page=2000`
+	1. Add any tour to `Tour` whose `name` doesn't exist in `Tour.name`
+2. Pull song list from `http://phish.in/api/v1/songs.json?per_page=2000`
+	1. Add any song to `Song` whose `title` doesn't exist in `Song.title`
+	2. Build an in memory map between phish.in's `id` and iguana2's `Song.id` (to be used when inserting shows)
+3. Pull venue list from `http://phish.in/api/v1/venues.json?per_page=2000`
+	1. Add any song to `Venue` whose `id` doesn't exist in `Venue.source_id`
+	2. Build an in memory map between phish.in's `id` and iguana2's `Venue.id`
+4. Pull show list from `http://phish.in/api/v1/shows.json?per_page=2000`
+	1. Filter the show list to only contain shows whose `id` value doesn't exist in `Source.source_identifier`. This way we only pull new shows.
+	2. Pull full show data for each remaining show
+		1. Pull data from `http://phish.in/api/v1/show-on-date/#{date | YYYY-MM-DD}.json`
+	3. Import more metadata from [phish.net](http://phish.net)
+5. Build years
+6. Pull era list from `http://phish.in/api/v1/eras.json`
+	9. Drop all `Era`s associated with `Phish` and re-add all eras from the JSON
+  
+### ArchiveSetlistFm
+
+  1. Import setlist metadata from [setlist.fm](http://setlist.fm)
+  2. Import media from [archive.org](http://archive.org) by matching the data in each source to the show metadata imported from `setlist.fm`. Show, venue and song data comes from setlist.fm, source data and track names come from archive.org but the setlist should be visible in the UI. **Report when a match is not found, with enough information to import that single item later after the algorithm has been tweaked**.
+  
+### JustArchive
+
+When setlist.fm doesn't have good information for an artist, basically iguana 1.0.
+
+1. Import media and build setlist information based on [archive.org](http://archive.org). Only attempt to reuse venues when they belong specifically to that artist (setlist.fm venues are shared across artists).
+	
+### WidespreadPanic
+
+1. Import setlist data just like `ArchiveSetlistfm`.
+2. Import media from [panicstream.com](http://panicstream.com).
