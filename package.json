@@ -1,0 +1,30 @@
+{
+  "name": "iguana2",
+  "version": "0.0.1",
+  "description": "A complete rewrite of [iguana](https://github.com/alecgorge/iguana) to be more abstracted and support a variety of sources. It also sets up data to be better prepared for future additions of users and statistic generation.",
+  "main": "bin/iguana2",
+  "dependencies": {
+    "bluebird": "^2.9.24",
+    "bunyan": "^1.3.4",
+    "hiredis": "^0.3.0",
+    "mysql2": "^0.15.5",
+    "redis": "^0.12.1",
+    "request": "^2.55.0",
+    "restify": "^3.0.1",
+    "restify-namespace": "^0.1.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alecgorge/iguana2.git"
+  },
+  "author": "Alec Gorge <alecgorge@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/alecgorge/iguana2/issues"
+  },
+  "homepage": "https://github.com/alecgorge/iguana2"
+}

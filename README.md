@@ -43,6 +43,9 @@ Relation Name | Type | Comments
 features | has_one **FeatureSet** | what kind of functionality can we expect the `data_source` to provide. This is mostly to guide the UI so it can be written in a general way
 years | has_many **Year**
 shows | has_many **Show**
+eras | has_many **Era**
+tours | has_many **Tour**
+songs | has_many **Songs**
 
 ### Year
 
@@ -60,6 +63,8 @@ avg_rating | float | The average of all the average ratings for each show in the
 Relation Name | Type | Comments
 :---------- | :--- | :-------
 artist | belongs_to **Artist**
+era | belongs_to **Era**
+shows | has_many **Shows**
 
 ### FeatureSet
 
@@ -98,9 +103,9 @@ Column Name | Type | Comments
 :---------- | :--- | :-------
 date | date | See `display_date`.
 display_date | string | Sometimes the date is unknown (1970-XX-XX so this column is used for display and the first of the month or year is used for sorting)
-year | int
 rating_weighted_avg | float
 duration_avg | float
+source_count | int
 
 Relation Name | Type | Comments
 :---------- | :--- | :-------
@@ -108,6 +113,10 @@ tour | belongs_to **Tour**
 venue | belongs_to **Venue**
 sources | has_many **Source**
 sets | has_many **Set**
+year | belongs_to **Year**
+artist | belongs_to **Artist**
+songs | has_many **Songs**
+tracks | has_many **Tracks**
 
 ### Source
 
@@ -186,6 +195,7 @@ play_count | int | Counted from `Track` not `SourceTrack`.
 Relation Name | Type | Comments
 :---------- | :--- | :-------
 artist | belongs_to **Source**
+shows | has_many **Show**
 
 ### Set
 
@@ -213,7 +223,6 @@ Relation Name | Type | Comments
 :---------- | :--- | :-------
 show | belongs_to **Show**
 set | belongs_to **Set**
-song | belongs_to **Song**
 
 ### Tour
 
@@ -295,8 +304,8 @@ module DataImport {
 	2. Build an in memory map between phish.in's `id` and iguana2's `Venue.id`
 4. Pull show list from `http://phish.in/api/v1/shows.json?per_page=2000`
 	1. Filter the show list to only contain shows whose `id` value doesn't exist in `Source.source_identifier`. This way we only pull new shows.
-	2. Pull full show data for each remaining show
-		1. Pull data from `http://phish.in/api/v1/show-on-date/#{date | YYYY-MM-DD}.json`
+	2. Pull full show data for each remaining show `http://phish.in/api/v1/show-on-date/#{date | YYYY-MM-DD}.json`
+		1. Pull data from 
 	3. Import more metadata from [phish.net](http://phish.net)
 5. Build years
 6. Pull era list from `http://phish.in/api/v1/eras.json`
@@ -317,3 +326,30 @@ When setlist.fm doesn't have good information for an artist, basically iguana 1.
 
 1. Import setlist data just like `ArchiveSetlistfm`.
 2. Import media from [panicstream.com](http://panicstream.com).
+
+
+# Environment Setup
+
+## Development
+
+Requires vagrant to be installed.
+
+```
+git clone https://github.com/dokku-alt/dokku-alt.git
+cd dokku-alt/
+vagrant up
+```
+
+### Easy dokku command access
+
+```
+vagrant ssh-config --host dokku.me >> ~/.ssh/config
+```
+
+Add this to your base_profile or equivlent:
+
+```
+alias dokku='ssh dokku.me dokku'
+```
+
+Now you can use dokku commands locally to operate on the dev box.
