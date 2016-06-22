@@ -4,13 +4,19 @@ A complete rewrite of [iguana](https://github.com/alecgorge/iguana) to be more a
 
 The primary technical goal to provide an abstraction over media sources such as [archive.org](http://archive.org), [panicstream.com](http://panicstream.com) and [phish.in](http://phish.in) and integrate metadata sources such as [setlist.fm](http://setlist.fm) or [phish.net](http://phish.net) to provide extended metadata or reviews. This is complicated by the fact that a media source may provide reliable metadata as well.
 
-The ultimate functional goal of iguana2 is to allow me to unify the networking and playback codebases for PhishOD, Listen to the Dead and the upcoming Relisten app without losing any of the extra features [PhishOD](http://phishod.alecgorge.com) has because of much better data [phish.in](http://phish.in) and [phish.net](http://phish.net) provide.
+The ultimate functional goal of iguana2 is to allow me to unify and rewrite (in Swift!) the networking and playback codebases for PhishOD and Relisten app without losing any of the extra features [PhishOD](http://phishod.alecgorge.com) has because of much better data [phish.in](http://phish.in) and [phish.net](http://phish.net) provide.
+
+## Core Tenets
+
+1. Music is #1. Never hide a show because we don't have metadata.
+2. Make sure to credit the tapers and hosts of content &mdash; nothing is possible without them.
+3. Utilize secondary, metadata-only sources to provide more ways to access the music. Don't try to match music sources to metadata sources. This will fail.
 
 ## Definitions
 
-Data types: boolean, date, datetime, int, float, varchar, text
+Data types are all Postgres notation and implications.
 
-All data structures have a unique, autoincrementing id and a created_at and updated_at field.
+All data structures have a unique, autoincrementing `id` and a `created_at` and `updated_at` field.
 
 #### Data Collection Techniques
 
@@ -19,278 +25,179 @@ All data structures have a unique, autoincrementing id and a created_at and upda
   2. Import more metadata from [phish.net](http://phish.net)
   
 * `ArchiveSetlistFm`
-  1. Import setlist metadata from [setlist.fm](http://setlist.fm)
-  2. Import media from [archive.org](http://archive.org) by matching the data in each source to the show metadata imported from `setlist.fm`. Show, venue and song data comes from setlist.fm, source data and track names come from archive.org but the setlist should be visible in the UI. **Report when a match is not found, with enough information to import that single item later after the algorithm has been tweaked**.
+  1. Import media from [archive.org](http://archive.org)
+  2. Import setlist metadata from [setlist.fm](http://setlist.fm)
   
 * `JustArchive` (when setlist.fm doesn't have good information for an artist, basically iguana 1.0)
 	1. Import media and build setlist information based on [archive.org](http://archive.org). Only attempt to reuse venues when they belong specifically to that artist (setlist.fm venues are shared across artists).
 	
 * `WidespreadPanic`
+	1. Import media from [panicstream.com](http://panicstream.com).
 	1. Import setlist data just like `ArchiveSetlistfm`.
-	2. Import media from [panicstream.com](http://panicstream.com).
 
-### Artist
-
-Column Name | Type | Comments
-:---------- | :--- | :-------
-name | string
-identifier | string | potentially used by the `data_source` to look up data appropriately
-data_source | string | an identifier refering to one of the different data collection techniques (Phish, ArchiveSetlist, JustArchive, etc)
-musicbrainz_id | string | A useful identifier for integrating with a variety of services
-
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-features | has_one **FeatureSet** | what kind of functionality can we expect the `data_source` to provide. This is mostly to guide the UI so it can be written in a general way
-years | has_many **Year**
-shows | has_many **Show**
-eras | has_many **Era**
-tours | has_many **Tour**
-songs | has_many **Songs**
-
-### Year
-
-Cached summerization data about each year of an artist.
+### artists
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
-year | int 
-show_count | int | **NOT** the number of recordings
-recording_count | int
-duration | The sum of the duration of each show in the year (use the longest source per show)
-avg_duration | float | The average duration of each show in the year (use the longest source per show)
-avg_rating | float | The average of all the average ratings for each show in the year
+name | text
+upstream\_identifier | text | potentially used by the `data_source` to look up data appropriately
+data\_source | text | an identifier referring to one of the different data collection techniques (Phish, ArchiveSetlist, JustArchive, etc)
+musicbrainz_id | text | A useful identifier for integrating with a variety of services
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-artist | belongs_to **Artist**
-era | belongs_to **Era**
-shows | has_many **Shows**
+### years
 
-### FeatureSet
+Cached summarization data about each year of an artist.
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
+artist_id | integer
+era_id | nullable integer 
+year | text | String because it is possible that the year might not be known
+show_count | integer | **NOT** the number of recordings
+recording_count | integer
+duration | integer  | The sum of the duration (in seconds) of each show in the year (use the longest source per show)
+avg_duration | real | The average duration of each show in the year (use the longest source per show)
+avg_rating | real | The average of all the average ratings for each show in the year
+
+### featuresets
+
+Column Name | Type | Comments
+:---------- | :--- | :-------
+artist_id | integer
+descriptions | boolean | Sometimes there are just a taper notes file
 eras | boolean | Does the artist have eras (Phish 1.0, Phish 2.0, Phish 3.0)
 multiple_sources | boolean | To clean up the UI. Everything will still be stored as if it can support multiple sources. Some artists, such as Phish, won't ever have multiple sources for a show. This will allow queries and UI paths to short-circuit.
-reviews_ratings | boolean
+reviews | boolean
+ratings | boolean
 tours | boolean
 taper_notes | boolean | Is the raw txt file from the source available?
 source_information | boolean | Broken down information (taper, transferrer, etc) instead of big taper notes
-sets | boolean
-venues | boolean
+sets | boolean | For track listings. Obviously every band has sets when playing live.
+per\_show\_venues | boolean | We know for sure what the venue is.
+per\_source\_venues | boolean | No authority for venues, every source has to list it
+venue\_coords | boolean | Lat and long for venues. Could be calculated if location information is specific enough
 songs | boolean
+years | boolean | Default true. What artist wouldn't??
+track_names | boolean | For very raw sources where we only have filenames
+track_md5s | boolean
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-artist | belongs_to **Artist**
-
-### Era
+### eras
 
 Logical grouping of several years
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
+artist_id | integer
 name | string
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-artist | belongs_to **Artist**
-years | has_many **Year**
-
-### Show
+### shows
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
+year_id | integer
+artist_id | integer
+tour_id | nullable integer
+venue_id | nullable integer
 date | date | See `display_date`.
-display_date | string | Sometimes the date is unknown (1970-XX-XX so this column is used for display and the first of the month or year is used for sorting)
-rating_weighted_avg | float
-duration_avg | float
-source_count | int
+display_date | varchar(32) | Sometimes the date is unknown (1970-XX-XX so this column is used for display and the first of the month or year is used for sorting). This is something that is unique on (artist_id + display_date) and should be used to 
+avg\_rating\_weighted | real | calculated based on # of reviews and the rating itself
+avg_duration | real
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-tour | belongs_to **Tour**
-venue | belongs_to **Venue**
-sources | has_many **Source**
-sets | has_many **Set**
-year | belongs_to **Year**
-artist | belongs_to **Artist**
-songs | has_many **Songs**
-tracks | has_many **Tracks**
-
-### Source
+### sources
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
-source_id | string | Something to identify the this information in the data source
-description | string
-taper_notes | string | For sources that don't have detailed info, this will be the whole txt file. For others it is just a bit informtation
-source | string
-taper | string
-transferer | string
-lineage | string
+show_id | integer
+upstream_identifier | string | Something to identify the this information in the data source **unqiue**
 is_soundboard | boolean
 is_remastered | boolean
-rating_avg | float
-rating_count | int
-rating_weighted_avg | float
+description | text
+taper_notes | text | For sources that don't have detailed info, this will be the whole txt file. For others it is just a bit information
+source | text
+taper | text
+transferer | text
+lineage | text
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-show | belongs_to **Show**
-reviews | has_many **SourceReview**
-sets | has_many **SourceSet**
-tracks | has_many **SourceTrack**
-
-### SourceSet
+### source_sets
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
-index | int | Used for ordering the sets properly
-name | string
+source_id | integer
+index | integer | Used for ordering the sets properly
+name | text
 is_encore | boolean
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-tracks | has_many **SourceTrack**
-show | belongs_to **SourceShow** | SourceSets are unique to a given Source
-
-### SourceTrack
+### source_tracks
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
-track_position | int
-title | string
-duration | int
-slug | string
-mp3_url | string
+source_id | integer
+set_id | integer
+track_position | integer
+duration | integer
+title | text
+slug | text
+mp3_url | text
+md5 | nullable text
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-source | belongs_to **Source**
-set | belongs_to **SourceSet**
-
-### SourceReview
+### source_review
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
-review_title | string
-review | string
-author | string
-date | date
-rating | int
+source_id | integer
+authored_at | timestamp with timezone
+rating | integer | On a scale of one to 10
+review_title | text
+review | text
+author | text
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-source | belongs_to **Source**
-
-### Song
+### setlist_show
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
-title | string
-slug | string
-play_count | int | Counted from `Track` not `SourceTrack`.
+artist_id | integer
+upstream_identifier | text
+display_date | text
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-artist | belongs_to **Source**
-shows | has_many **Show**
-
-### Set
-
-**Note:** may not provide useful information for all artists.
+### setlist_song
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
-index | int | Used for ordering the sets properly
-name | string
-is_encore | boolean
+artist_id | integer
+upstream_identifier | text | unique among artist\_id + upstream\_identifier
+title | text
+slug | text
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-tracks | has_many **Track**
-show | belongs_to **Show** | Sets are unique to a given show
-
-### Track
+### setlist\_song\_plays
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
-track_position | int
-title | string
+played\_setlist\_song\_id | integer
+played\_setlist\_show\_id | integer
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-show | belongs_to **Show**
-set | belongs_to **Set**
-
-### Tour
+### tours
 
 Tours **do not** overlap and can therefore be sorted by `start_date`.
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
+artist_id | integer
 name | string
-show_count | int | Perhaps this shouldn't be stored and simply calculated and returned?
-start_date | date 
-end_date | date
+start_date | nullable date 
+end_date | nullable date
 
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-show | has_many **Show**
-artist | belongs_to **Artist**
-
-### Venue
+### venues
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
-name | string
-city | string
-state | string
-state_code | string
-lat | float
-long | float
-country | string
-country_code | string
-source_id | string
-
-Relation Name | Type | Comments
-:---------- | :--- | :-------
-show | has_many **Show**
-artist | belongs_to **Artist** | this is only needed for artists not on setlist.fm. otherwise, venues **can** be shared.
-
-## Functionality required to stream
-
-Legend: **P**: partial (not the best data but it can be done). **✓**: complete.
-
-Feature 		| archive.net | panicstreams.com | phish.in | phish.net | setlist.fm | manual entry | calculated |
-:------ 		| :---------: | :--------------: | :------: | :-------: | :--------: | :----------: | :--------: |
-Artist			| | | | | | ✓ |
-Year			| | | | | | | ✓
-FeatureSet		| | | | | | ✓ |
-Era				| | | ✓ | | |
-Show			| P | P | ✓ | ✓ | ✓ | | P (rating)
-Source			| ✓ | ✓ | ✓ | P (rating)
-SourceSet		| P | P | ✓
-SourceTrack		| ✓ | ✓ | ✓
-SourceReview	| ✓ |   |   | ✓ |
-Song			| | | ✓ | | ✓ |
-Set				| P | P | ✓ | ✓ | ✓
-Track			| P | P | ✓ | ✓ | ✓
-Tour			| | | ✓ | ✓ | P
-Venue			| P | P | ✓ | ✓ | ✓
+artist_id | nullable integer | Only needed for source specific venues
+name | text
+location | text | Could be City; State; City, State; City, Country
+lat | nullable real
+long | nullable real
+upstream_identifier | text
 
 ## Indexing Approach
-
-```
-module DataImport {
-	export class Indexer {
-		artist: Artist;
-		constructor(artist: Artist);
-		rebuildYears() : Promise;
-	}
-}
-```
 
 ### Phish
 
@@ -313,43 +220,24 @@ module DataImport {
   
 ### ArchiveSetlistFm
 
-  1. Import setlist metadata from [setlist.fm](http://setlist.fm)
-  2. Import media from [archive.org](http://archive.org) by matching the data in each source to the show metadata imported from `setlist.fm`. Show, venue and song data comes from setlist.fm, source data and track names come from archive.org but the setlist should be visible in the UI. **Report when a match is not found, with enough information to import that single item later after the algorithm has been tweaked**.
+  1. List identifiers from `http://archive.org/advancedsearch.php?q=collection%3A${upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=9999999&page=1&output=json&save=yes`
+  	1. If the identifier isn't in the database, import the show
+	2. If the last updatedate is newer than the updated\_at, drop the source, the set and all associated tracks and re-add it
+	3. Check+add any new reviews
+	4. *Note:* Adding means making 1 new source, 1 new set and n new tracks
+  2. Import setlist metadata from `http://api.setlist.fm/rest/0.1/artist/${musicbrainz_id}/setlists.json?p=${page}`
+	  1. If the setlist id isn't in the database import the setlist_show
+	  2. If the lastUpdated is newer than the updated\_at remove the setlist\_show and the all entries in setlist\_song\_plays
+	  3. Check if the venue exists. If not create it and update the show (eventDate) for that date to point to the new venue
+  3. Drop and rebuild all years for the artist
   
 ### JustArchive
 
 When setlist.fm doesn't have good information for an artist, basically iguana 1.0.
 
-1. Import media and build setlist information based on [archive.org](http://archive.org). Only attempt to reuse venues when they belong specifically to that artist (setlist.fm venues are shared across artists).
+1. See step 1 above, but also do a artist specific venue check as well
 	
 ### WidespreadPanic
 
 1. Import setlist data just like `ArchiveSetlistfm`.
 2. Import media from [panicstream.com](http://panicstream.com).
-
-
-# Environment Setup
-
-## Development
-
-Requires vagrant to be installed.
-
-```
-git clone https://github.com/dokku-alt/dokku-alt.git
-cd dokku-alt/
-vagrant up
-```
-
-### Easy dokku command access
-
-```
-vagrant ssh-config --host dokku.me >> ~/.ssh/config
-```
-
-Add this to your base_profile or equivlent:
-
-```
-alias dokku='ssh dokku.me dokku'
-```
-
-Now you can use dokku commands locally to operate on the dev box.
