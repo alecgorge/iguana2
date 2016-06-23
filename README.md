@@ -51,7 +51,6 @@ Cached summarization data about each year of an artist.
 Column Name | Type | Comments
 :---------- | :--- | :-------
 artist_id | integer
-era_id | nullable integer 
 year | text | String because it is possible that the year might not be known
 show_count | integer | **NOT** the number of recordings
 recording_count | integer
@@ -59,7 +58,7 @@ duration | integer  | The sum of the duration (in seconds) of each show in the y
 avg_duration | real | The average duration of each show in the year (use the longest source per show)
 avg_rating | real | The average of all the average ratings for each show in the year
 
-### featuresets
+### features
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
@@ -80,6 +79,9 @@ songs | boolean
 years | boolean | Default true. What artist wouldn't??
 track_names | boolean | For very raw sources where we only have filenames
 track_md5s | boolean
+review_titles | boolean
+jam_charts | boolean
+setlist\_data\_incomplete | boolean | Sometimes setlist.fm isn't up to date/doesn't go all the way back. We should provide info that songs/tours/etc are incomplete
 
 ### eras
 
@@ -88,6 +90,7 @@ Logical grouping of several years
 Column Name | Type | Comments
 :---------- | :--- | :-------
 artist_id | integer
+order | integer
 name | string
 
 ### shows
@@ -98,10 +101,11 @@ year_id | integer
 artist_id | integer
 tour_id | nullable integer
 venue_id | nullable integer
+era_id | nullable integer
 date | date | See `display_date`.
-display_date | varchar(32) | Sometimes the date is unknown (1970-XX-XX so this column is used for display and the first of the month or year is used for sorting). This is something that is unique on (artist_id + display_date) and should be used to 
 avg\_rating\_weighted | real | calculated based on # of reviews and the rating itself
-avg_duration | real
+avg\_duration | real
+display_date | varchar(32) | Sometimes the date is unknown (1970-XX-XX so this column is used for display and the first of the month or year is used for sorting). This is something that is unique on (artist_id + display_date) and should be used to 
 
 ### sources
 
@@ -111,6 +115,9 @@ show_id | integer
 upstream_identifier | string | Something to identify the this information in the data source **unqiue**
 is_soundboard | boolean
 is_remastered | boolean
+avg_rating | integer
+num_reviews | integer
+has_jamcharts | boolean
 description | text
 taper_notes | text | For sources that don't have detailed info, this will be the whole txt file. For others it is just a bit information
 source | text
@@ -124,8 +131,8 @@ Column Name | Type | Comments
 :---------- | :--- | :-------
 source_id | integer
 index | integer | Used for ordering the sets properly
-name | text
 is_encore | boolean
+name | text
 
 ### source_tracks
 
@@ -140,26 +147,28 @@ slug | text
 mp3_url | text
 md5 | nullable text
 
-### source_review
+### source_reviews
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
 source_id | integer
 authored_at | timestamp with timezone
 rating | integer | On a scale of one to 10
-review_title | text
+title | text
 review | text
 author | text
 
-### setlist_show
+### setlist_shows
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
 artist_id | integer
+venue_id | integer
+tour_id | integer
 upstream_identifier | text
-display_date | text
+date | date
 
-### setlist_song
+### setlist_songs
 
 Column Name | Type | Comments
 :---------- | :--- | :-------
@@ -220,16 +229,21 @@ upstream_identifier | text
   
 ### ArchiveSetlistFm
 
-  1. List identifiers from `http://archive.org/advancedsearch.php?q=collection%3A${upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=9999999&page=1&output=json&save=yes`
-  	1. If the identifier isn't in the database, import the show
-	2. If the last updatedate is newer than the updated\_at, drop the source, the set and all associated tracks and re-add it
-	3. Check+add any new reviews
-	4. *Note:* Adding means making 1 new source, 1 new set and n new tracks
-  2. Import setlist metadata from `http://api.setlist.fm/rest/0.1/artist/${musicbrainz_id}/setlists.json?p=${page}`
-	  1. If the setlist id isn't in the database import the setlist_show
-	  2. If the lastUpdated is newer than the updated\_at remove the setlist\_show and the all entries in setlist\_song\_plays
-	  3. Check if the venue exists. If not create it and update the show (eventDate) for that date to point to the new venue
-  3. Drop and rebuild all years for the artist
+  1. Import setlist metadata from `http://api.setlist.fm/rest/0.1/artist/${musicbrainz_id}/setlists.json?p=${page}`
+	  1. If the setlist id isn't in the database as upstream\_identifier import the setlist\_show
+	  2. **setlist\_shows** If the lastUpdated is newer than the updated\_at remove the setlist\_show and the all entries in setlist\_song\_plays. Set updated\_at to lastUpdated
+	  3. **venues**, **tours** Create or if lastUpdated > updated\_at update properties and set updated_at to lastUpdated
+	  4. **setlist\_songs** if the song's id exists in the upstream identifier then add a record to the join table, otherwise add the song and then the join table record
+
+  2. List identifiers from `http://archive.org/advancedsearch.php?q=collection%3A${upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=9999999&page=1&output=json&save=yes`
+  	1. **sources** If the identifier isn't in the database, import the show
+	2. **sources**, **source_sets**, **source_tracks** If the last updatedate is newer than the updated\_at, drop the source, the set and all associated tracks and re-add it
+	3. **reviews** Check+add any new reviews
+	4. *Note:* Adding means making 1 new source, 1 new set and n new tracks. Use setlist_show's venue id to pick the correct venue
+
+  3. **shows** If there are sources without a corresponding shows row add them
+  4. Update all years for the artist
+	1. Set year\_id for shows for the appropriate year 
   
 ### JustArchive
 
